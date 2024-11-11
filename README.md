@@ -3,45 +3,26 @@
 
 <div id="top" align="center">
 
-HarmoDT: Harmony Multi-Task Decision Transformer for Offline Reinforcement Learning
+Evaluating Simplicial Normalization in Multi-Task Reinforcement Learning
 -----------------------------
-<img src="https://img.shields.io/badge/Version-1.0.0-blue.svg" alt="Version"> 
-<img src="https://img.shields.io/badge/License-Apache_2.0-green.svg" alt="License">
-
-<h4> |<a href="https://arxiv.org/abs/2405.18080"> 📑 Paper </a> |
-<a href="https://github.com/charleshsc/HarmoDT"> 🐱 Github Repo </a> |
-</h4>
 
 <!-- **Authors:** -->
 
-_**Shengchao Hu<sup>1,2\*</sup>, Ziqing Fan<sup>1,2\*</sup>, Li Shen<sup>3,4</sup>, Ya Zhang<sup>1,2</sup>, Yanfeng Wang<sup>1,2</sup>, Dacheng Tao<sup>5</sup>**_
+_**Geonwoo Cho<sup>1</sup>, Subi Lee<sup>1</sup>, Jaemoon Lee<sup>2</sup>**_
 
 
 <!-- **Affiliations:** -->
 
 
-_<sup>1</sup> Shanghai Jiao Tong University,
-<sup>2</sup> Shanghai AI Laboratory,
-<sup>3</sup> Sun Yat-sen University,
-<sup>4</sup> JD Explore Academy,
-<sup>5</sup> Nanyang Technological University._
+_<sup>1</sup> Gwangju Institute of Science and Technology,
+<sup>2</sup> Seoul National University
 
 </div>
 
 
-## Contents
-
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-- [Citation](#citation)
-- [Acknowledgements](#acknowledgments)
-
-
 ## Overview
 
-The purpose of offline multi-task reinforcement learning (MTRL) is to develop a unified policy applicable to diverse tasks without the need for online environmental interaction. Recent advancements approach this through sequence modeling, leveraging the Transformer architecture's scalability and the benefits of parameter sharing to exploit task similarities. However, variations in task content and complexity pose significant challenges in policy formulation, necessitating judicious parameter sharing and management of conflicting gradients for optimal policy performance.
-
-In this work, we introduce the Harmony Multi-Task Decision Transformer (HarmoDT), a novel solution designed to identify an optimal harmony subspace of parameters for each task. We approach this as a bi-level optimization problem, employing a meta-learning framework that leverages gradient-based techniques. The upper level of this framework is dedicated to learning a task-specific mask that delineates the harmony subspace, while the inner level focuses on updating parameters to enhance the overall performance of the unified policy. Empirical evaluations on a series of benchmarks demonstrate the superiority of HarmoDT, verifying the effectiveness of our approach.
+Multi-task reinforcement learning (MTRL) addresses key limitations of existing reinforcement learning (RL) methods, notably in generalization and sample efficiency. However, managing multiple tasks simultaneously remains a significant challenge. Various approaches, including curriculum learning, the mixture of experts, and parameter-sharing strategies, have been explored to improve MTRL performance. On the other hand, one of the recent research suggests that Simplicial Normalization (SimNorm), rather than ReLU, is an effective activation function for modeling the objective function on single task RL. In this paper, we investigate whether this claim extends to MTRL. We conducted experiments on two types of agents—one using ReLU and the other using SimNorm—within the Meta-world environments, comparing their total return and success rates. Our findings show that SimNorm appears to underperform compared to ReLU in the MTRL environments.
 
 
 
@@ -55,17 +36,6 @@ python main.py --seed 123 --data_path ./MT50 --prefix_name MT5 # MT30, MT50
 ```
 
 
-## Citation
-If you find this work is relevant with your research or applications, please feel free to cite our work!
-```
-@inproceedings{HarmoDT,
-    title={HarmoDT: Harmony Multi-Task Decision Transformer for Offline Reinforcement Learning},
-    author={Hu, Shengchao and Fan, Ziqing and Shen, Li and Zhang, Ya and Wang, Yanfeng and Tao, Dacheng},
-    booktitle={International Conference on Machine Learning},
-    year={2024},
-}
-```
-
 ## Acknowledgments
 
-This repo benefits from [DT](https://github.com/kzl/decision-transformer) and [MTDiff](https://github.com/tinnerhrhe/MTDiff). Thanks for their wonderful works!
+This repo benefits from [HarmoDT](https://github.com/charleshsc/HarmoDT) and [PWM](https://github.com/imgeorgiev/PWM). Thanks for their wonderful works!
