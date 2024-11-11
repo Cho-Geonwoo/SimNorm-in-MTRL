@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
+import torch.nn.functional as F
 
 from transformers.activations import ACT2FN
 from transformers.file_utils import (
@@ -244,13 +245,36 @@ class Attention(nn.Module):
         return outputs  # a, present, (attentions)
 
 
+class SimNorm(nn.Module):
+    """
+    Simplicial normalization.
+    Adapted from https://arxiv.org/abs/2204.00616.
+    """
+
+    def __init__(self, simnorm_dim=8):
+        super().__init__()
+        self.dim = simnorm_dim
+
+    def forward(self, x):
+        shp = x.shape
+        x = x.view(*shp[:-1], -1, self.dim)
+        x = F.softmax(x, dim=-1)
+        return x.view(*shp)
+
+    def __repr__(self):
+        return f"SimNorm(dim={self.dim})"
+
+
 class MLP(nn.Module):
     def __init__(self, n_state, config):  # in MLP: n_state=3072 (4 * n_embd)
         super().__init__()
         nx = config.n_embd
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
-        self.act = ACT2FN[config.activation_function]
+        if config.activation_function == "simnorm":
+            self.act = SimNorm(simnorm_dim=8)
+        else:
+            self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
@@ -265,7 +289,10 @@ class AdapterMLP(nn.Module):
         nx = config.n_embd
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
-        self.act = ACT2FN[config.activation_function]
+        if config.activation_function == "simnorm":
+            self.act = SimNorm(simnorm_dim=8)
+        else:
+            self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
@@ -520,7 +547,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         # self.wpe = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
+        self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.init_weights()
@@ -536,39 +563,6 @@ class GPT2Model(GPT2PreTrainedModel):
             num_layers -= 1
         self.use_layers = num_layers
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.h))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
-        # self.wpe = self.wpe.to(self.first_device)
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        # ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        self.wte = self.wte.to("cpu")
-        # self.wpe = self.wpe.to("cpu")
-        for index in range(len(self.h)):
-            self.h[index] = self.h[index].to("cpu")
-        self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
-
     def get_input_embeddings(self):
         return self.wte
 
@@ -583,12 +577,6 @@ class GPT2Model(GPT2PreTrainedModel):
             self.h[layer].attn.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="gpt2",
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
             self,
             input_ids=None,
@@ -697,17 +685,6 @@ class GPT2Model(GPT2PreTrainedModel):
             if self.use_layers is not None and i >= self.use_layers:
                 break
 
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure layer_past is on same device as hidden_states (might not be correct)
-                if layer_past is not None:
-                    layer_past = layer_past.to(hidden_states.device)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if isinstance(head_mask, torch.Tensor):
-                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -749,12 +726,6 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_self_attentions = all_self_attentions + (outputs[2],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (outputs[3],)
-
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         hidden_states = self.ln_f(hidden_states)
 

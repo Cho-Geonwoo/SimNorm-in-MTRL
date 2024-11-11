@@ -166,6 +166,7 @@ def prompt_evaluate_episode_rtg(
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)
+        reward = torch.tensor(reward, dtype=torch.float32, device=device)
         rewards[-1] = reward
         if no_r:
             rewards[-1] = 0.0

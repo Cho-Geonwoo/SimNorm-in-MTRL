@@ -1,4 +1,3 @@
-import d4rl
 from ast import parse
 import numpy as np
 import torch
@@ -49,6 +48,7 @@ def experiment_mix_env(
     batch_size = variant['batch_size']
     pct_traj = variant.get('pct_traj', 1.)
     mode = variant.get('mode', 'normal')
+    switch_interval = variant['switch_interval']
     seed = variant['seed']
     set_seed(variant['seed'])
     env_name_ = variant['env']
@@ -163,7 +163,8 @@ def experiment_mix_env(
         get_prompt=get_prompt(prompt_trajectories_list[0], prompt_info[env_name], variant),
         get_prompt_batch=get_prompt_batch(trajectories_list, prompt_trajectories_list, info, prompt_info, variant, train_env_name_list),
         logger=logger,
-        variant=variant
+        variant=variant,
+        device=device,
     )
 
     ######
@@ -185,8 +186,11 @@ def experiment_mix_env(
             env_masks[env_name] = mask
     harmo_gradient=None
 
+    env_id = 0
+ 
     for iter in trange(variant['max_iters']):
-        env_id = iter % num_env
+        if iter % switch_interval == 0:  # switch_interval마다 env 교체
+            env_id = (env_id + 1) % num_env  # 다음 환경으로 변경
         env_name = train_env_name_list[env_id]
 
         logs, _ = trainer.pure_train_iteration_mix(
@@ -238,10 +242,10 @@ def experiment_mix_env(
             env_masks_vectors={name:dict_to_vector(env_masks[name]) for name in env_masks}
             model_vec = parameters_to_vector(trainer.model.parameters())            
 
-            dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, change_num)
+            dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, device, change_num)
 
             generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, \
-                model_vec, gamma=variant["gamma"], change_num=change_num, mode=variant["select"])
+                model_vec, device, gamma=variant["gamma"], change_num=change_num, mode=variant["select"])
             
             for name in env_masks_vectors:
                 env_masks_vectors[name]=env_masks_vectors[name]-generate_masks_vectors[name]+dead_masks_vectors[name]
@@ -274,7 +278,7 @@ if __name__ == '__main__':
     parser.add_argument('--embed_dim', type=int, default=256)
     parser.add_argument('--n_layer', type=int, default=6)
     parser.add_argument('--n_head', type=int, default=8)
-    parser.add_argument('--activation_function', type=str, default='relu')
+    parser.add_argument('--activation_function', type=str, default='simnorm')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
@@ -285,6 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--test_eval_interval', type=int, default=5000)
     parser.add_argument('--test_eval_seperate_interval', type=int, default=10000)
+    parser.add_argument('--switch-interval', type=int, default=1000)
 
     parser.add_argument('--mask_interval', type=int, default=500)
     parser.add_argument('--eta_min', type=int, default=0)

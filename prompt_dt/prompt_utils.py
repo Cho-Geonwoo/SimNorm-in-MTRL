@@ -356,7 +356,7 @@ def eval_episodes(target_rew, info, variant, env, env_name):
                     no_state_normalize=variant['no_state_normalize'],
                     info=info,               
                     )
-            returns.append(ret)
+            returns.append(ret.cpu().numpy())
             length.append(lens)
             success.append(suc)
         return {

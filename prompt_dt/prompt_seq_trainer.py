@@ -13,7 +13,7 @@ class PromptSequenceTrainer:
 
     def __init__(self, model, optimizer, batch_size, get_batch, loss_fn,
                  scheduler=None, eval_fns=None, get_prompt=None, get_prompt_batch=None, 
-                 logger=None, variant=None):
+                 logger=None, variant=None, device=None):
         self.model = model
         self.optimizer = optimizer
         self.batch_size = batch_size
@@ -26,6 +26,7 @@ class PromptSequenceTrainer:
         self.get_prompt = get_prompt
         self.prompt = self.get_prompt() # sample prompt data when initialization
         self.get_prompt_batch = get_prompt_batch
+        self.device = device
 
         self.eta_min = variant['eta_min']
         self.eta_max = variant['eta_max']
@@ -134,7 +135,7 @@ class PromptSequenceTrainer:
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), .25)
         apply_mask_grad(self.model, masks)
 
-        gradient = parameters_to_gradvector(self.model)
+        gradient = parameters_to_gradvector(self.model, device=self.device)
 
         self.model.load_state_dict(original_param)
 

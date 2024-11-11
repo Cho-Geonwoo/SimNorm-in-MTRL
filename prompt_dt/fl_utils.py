@@ -18,11 +18,11 @@ def get_harmo_gradient(gradient_set):
     return harmo_gradient
 
 @torch.no_grad()
-def mask_dead_harmo(harmo_gradient, gradient_set, mask_vectors,change_num=10):
+def mask_dead_harmo(harmo_gradient, gradient_set, mask_vectors, device, change_num=10):
     # from 0 to 1
     # find harmonical
     num_dead=change_num
-    new_vectors={name:torch.zeros(mask_vectors[name].size()).cuda() for name in mask_vectors}
+    new_vectors={name:torch.zeros(mask_vectors[name].size()).to(device=device) for name in mask_vectors}
 
     for name in mask_vectors:
         simi_vec=harmo_gradient*gradient_set[name]+(1-mask_vectors[name]*100000)
@@ -33,15 +33,15 @@ def mask_dead_harmo(harmo_gradient, gradient_set, mask_vectors,change_num=10):
     return new_vectors
 
 @torch.no_grad()
-def mask_generate_harmo(harmo_gradient, gradient_set, mask_vectors, model_vec, gamma=0, change_num=10,mode="fisher"):
+def mask_generate_harmo(harmo_gradient, gradient_set, mask_vectors, model_vec, device, gamma=0, change_num=10, mode="fisher"):
     num_new=change_num
 
-    new_vectors={name:torch.zeros(mask_vectors[name].size()).cuda() for name in mask_vectors}
+    new_vectors={name:torch.zeros(mask_vectors[name].size()).to(device=device) for name in mask_vectors}
     eps=1e-6
     model_vec_copy=model_vec.clone().detach()
     
     for name in mask_vectors:
-        harmo_score=((1-mask_vectors[name])*100000).cuda()
+        harmo_score=((1-mask_vectors[name])*100000).to(device=device)
         harmo_score=harmo_score+harmo_gradient*gradient_set[name]*gamma
         if mode =="fisher":
             harmo_score=harmo_score+(gradient_set[name])**2
@@ -57,7 +57,7 @@ def get_new_masks(dead_masks,new_masks,env_masks):
         env_masks[name]=env_masks[name]+dead_masks[name]-new_masks[name]
     pass
 
-def parameters_to_gradvector(net):
+def parameters_to_gradvector(net, device):
     vec = []
     for param in net.parameters():
         if param.grad !=None:
@@ -65,7 +65,7 @@ def parameters_to_gradvector(net):
             vec.append(param.grad.view(-1))
         else:
             
-            vec.append(torch.zeros(param.size()).view(-1).cuda())
+            vec.append(torch.zeros(param.size()).view(-1).to(device=device))
     return torch.cat(vec)
 
 def vector_to_dict(maskdict,dict_vector):
